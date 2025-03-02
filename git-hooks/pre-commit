@@ -1,0 +1,55 @@
+#!/bin/bash
+CONFIG_FILE="config/secrets.conf"
+TEMP_GITIGNORE=".gitignore"
+GITIGNORE_BACKUP=".gitignore.backup"
+
+
+
+# Vault-Passwort aus Umgebungsvariable oder Datei im Benutzerverzeichnis lesen
+if [[ -z "$VAULT_PASS" && -f "$HOME/.vault_pass" ]]; then
+    VAULT_PASS=$(cat "$HOME/.vault_pass")
+fi
+
+# Commit abbrechen, falls VAULT_PASS leer ist
+if [[ -z "$VAULT_PASS" ]]; then
+    echo "Fehler: VAULT_PASS ist nicht gesetzt! Setze es in der Umgebung oder speichere es in ~/.vault_pass"
+    exit 1
+fi
+
+# Backup der aktuellen .gitignore, falls nicht vorhanden
+if [[ ! -f "$GITIGNORE_BACKUP" ]]; then
+    cp "$TEMP_GITIGNORE" "$GITIGNORE_BACKUP"
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Konfigurationsdatei $CONFIG_FILE nicht gefunden!"
+    exit 1
+fi
+
+MODIFIED=0
+
+# Durchsuche Git für Dateien, die geändert wurden (geändert, hinzugefügt)
+git diff --cached --name-only | while read -r FILE; do
+    while IFS= read -r PATTERN; do
+        if [[ -n "$PATTERN" && "$FILE" == *"$PATTERN"* ]]; then
+            ENCRYPTED_FILE="${FILE}.vault"
+
+            echo "Verschlüssele: $FILE -> $ENCRYPTED_FILE"
+            ansible-vault encrypt "$FILE" --output "$ENCRYPTED_FILE" --vault-password-file <(echo "$VAULT_PASS")
+
+            echo "$FILE" >> "$TEMP_GITIGNORE"  # Originaldatei ignorieren
+            git rm --cached "$FILE"  # Entferne unverschlüsselte Datei aus Commit
+            git add "$ENCRYPTED_FILE"  # Füge verschlüsselte Datei hinzu
+            MODIFIED=1
+        fi
+    done < "$CONFIG_FILE"
+done
+
+if [[ $MODIFIED -eq 1 ]]; then
+    echo "Verschlüsselung abgeschlossen. Commit mit verschlüsselten Dateien."
+else
+    echo "Keine zu verschlüsselnden Dateien gefunden."
+fi
+
+exit 0
+

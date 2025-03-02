@@ -1,0 +1,12 @@
+#!/bin/bash
+GITIGNORE=".gitignore"
+GITIGNORE_BACKUP=".gitignore.backup"
+
+# Falls ein Backup existiert, setze die .gitignore zurück
+if [[ -f "$GITIGNORE_BACKUP" ]]; then
+    mv "$GITIGNORE_BACKUP" "$GITIGNORE"
+    echo ".gitignore wurde wiederhergestellt."
+fi
+git add .
+exit 0
+

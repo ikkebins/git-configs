@@ -1,0 +1,33 @@
+#!/bin/bash
+CONFIG_FILE="config/secrets.conf"
+
+# Vault-Passwort aus Umgebungsvariable oder Datei im Benutzerverzeichnis lesen
+if [[ -z "$VAULT_PASS" && -f "$HOME/.vault_pass" ]]; then
+    VAULT_PASS=$(cat "$HOME/.vault_pass")
+fi
+
+# Commit abbrechen, falls VAULT_PASS leer ist
+if [[ -z "$VAULT_PASS" ]]; then
+    echo "Fehler: VAULT_PASS ist nicht gesetzt! Setze es in der Umgebung oder speichere es in ~/.vault_pass"
+    exit 1
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Konfigurationsdatei $CONFIG_FILE nicht gefunden!"
+    exit 1
+fi
+
+while IFS= read -r PATTERN; do
+    if [[ -n "$PATTERN" ]]; then
+        find . -type f -name "${PATTERN}.vault" | while IFS= read -r ENCRYPTED_FILE; do
+            ORIGINAL_FILE="${ENCRYPTED_FILE%.vault}"
+
+            echo "Entschlüssele: $ENCRYPTED_FILE -> $ORIGINAL_FILE"
+            ansible-vault decrypt "$ENCRYPTED_FILE" --output "$ORIGINAL_FILE" --vault-password-file <(echo "$VAULT_PASS")
+        done
+    fi
+done < "$CONFIG_FILE"
+
+echo "Post-Merge Hook abgeschlossen."
+exit 0
+
